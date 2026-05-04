@@ -1143,16 +1143,19 @@ function selectCell(locId){
 // ── DATA ENTRY ────────────────────────────────────────────────────────────────
 let entryLoc=null;
 function openEntry(locId){
-  entryLoc=locId;
-  const d=liveINV[locId];
-  document.getElementById('entLoc').textContent=locId;
-  document.getElementById('entDesc').value=d?d[0]:'';
-  document.getElementById('entClr').value=d?d[1]:'';
-  document.getElementById('entQty').value=d&&d[2]!=null?d[2]:'';
-  document.getElementById('entNotes').value=d?d[3]:'';
+  entryLoc = locId;
+  const d = liveINV[locId];
+  const setVal = (id, val) => { const el = document.getElementById(id); if(el) el.value = val||''; };
+  const setTxt = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val||''; };
+  setTxt('entLoc', locId);
+  setVal('entDesc',  d ? d[0] : '');
+  setVal('entClr',   d ? d[1] : '');
+  setVal('entQty',   d && d[2] != null ? d[2] : '');
+  setVal('entNotes', d ? d[3] : '');
   // Reset shortcut field
-  clearShortcut();
-  document.getElementById('entModal').classList.add('open');
+  try { clearShortcut(); } catch(e) {}
+  const modal = document.getElementById('entModal');
+  if(modal) modal.classList.add('open');
 }
 document.getElementById('entSave').addEventListener('click',()=>{
   if(!entryLoc)return;
@@ -1160,33 +1163,47 @@ document.getElementById('entSave').addEventListener('click',()=>{
 });
 function doEntrySave(){
   if(!entryLoc)return;
-  const desc=document.getElementById('entDesc').value.trim();
-  const color=document.getElementById('entClr').value.trim();
-  const qv=document.getElementById('entQty').value.trim();
-  const notes=document.getElementById('entNotes').value.trim();
-  const qty=qv!==''?parseInt(qv):null;
-  // Find SKU from applied shortcut if any
-  const scKey=document.getElementById('entShortcut').value.trim().toLowerCase()||
-    (entScTag.querySelector('.sc-tag')?.textContent?.replace('✕','').trim().toLowerCase()||'');
-  const sku=(scKey&&SC[scKey])?SC[scKey].sku:'';
-  const entryData=[desc,color,qty,notes,(!desc&&!color&&qty===null)?'empty':'occupied',cssClr(color),sku];
-  liveINV[entryLoc]=entryData;
-  syncLocationUpdate(entryLoc, entryData);
-  document.getElementById('entModal').classList.remove('open');
-  if(currentAisle)renderAisle(currentAisle);
-  if(selectedLoc===entryLoc)selectCell(entryLoc);
-  logAction('edit', entryLoc, `${desc||'(empty)'} · ${color||''} · qty:${qty!=null?qty:'—'}`);
-  toast(`✓ ${entryLoc} updated`);
+  try {
+    const desc  = (document.getElementById('entDesc')?.value  ||'').trim();
+    const color = (document.getElementById('entClr')?.value   ||'').trim();
+    const qv    = (document.getElementById('entQty')?.value   ||'').trim();
+    const notes = (document.getElementById('entNotes')?.value ||'').trim();
+    const qty   = qv !== '' ? parseInt(qv) : null;
+    // Find SKU from applied shortcut if any
+    let sku = '';
+    try {
+      const scTag = document.getElementById('entScTag');
+      const scInp = document.getElementById('entShortcut');
+      const scKey = (scInp?.value||'').trim().toLowerCase() ||
+        (scTag?.querySelector('.sc-tag')?.textContent||'').replace('✕','').trim().toLowerCase();
+      if (scKey && SC[scKey]) sku = SC[scKey].sku || '';
+    } catch(e) {}
+    const entryData = [desc, color, qty, notes,
+      (!desc && !color && qty === null) ? 'empty' : 'occupied',
+      cssClr(color), sku];
+    liveINV[entryLoc] = entryData;
+    syncLocationUpdate(entryLoc, entryData);
+    document.getElementById('entModal').classList.remove('open');
+    if(currentAisle) renderAisle(currentAisle);
+    if(selectedLoc === entryLoc) selectCell(entryLoc);
+    logAction('edit', entryLoc, `${desc||'(empty)'} · ${color||''} · qty:${qty!=null?qty:'—'}`);
+    toast(`✓ ${entryLoc} updated`);
+  } catch(err) {
+    console.error('Save error:', err);
+    toast('⚠ Save failed — please try again');
+  }
 }
 document.getElementById('entClear').addEventListener('click',()=>{
   if(!entryLoc)return;
   ensureOperator(()=>{
+    if(!entryLoc) return;
     const clearData=['','',null,'','empty','',''];
     liveINV[entryLoc]=clearData;
     syncLocationUpdate(entryLoc, clearData);
-    document.getElementById('entModal').classList.remove('open');
-    if(currentAisle)renderAisle(currentAisle);
-    if(selectedLoc===entryLoc)selectCell(entryLoc);
+    const modal = document.getElementById('entModal');
+    if(modal) modal.classList.remove('open');
+    if(currentAisle) renderAisle(currentAisle);
+    if(selectedLoc===entryLoc) selectCell(entryLoc);
     logAction('clear', entryLoc, 'Location cleared');
     toast(`${entryLoc} cleared`);
   });
@@ -1883,7 +1900,7 @@ function doLogin() {
   applyPermissions();
   updateUserHeader();
   logAction('login', '', `Signed in as ${user.displayName} (${user.role})`);
-  if (!supaReady) initSupabase();
+  if (!fbReady) initFirebase();
 }
 
 function signOut() {
@@ -2121,11 +2138,10 @@ self.addEventListener('fetch', e => {
     document.getElementById('login-screen').style.display = 'none';
     applyPermissions();
     updateUserHeader();
-    initSupabase();
+    initFirebase();
   } else {
     document.getElementById('loginUser').focus();
-    // Still init Supabase for read-only data load
-    initSupabase();
+    initFirebase();
   }
 })();
 
